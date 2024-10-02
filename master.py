@@ -27,7 +27,7 @@ from pyspark.sql.functions import *
 
 finaljoin = rm.join(df2,["username"],"left").join(df3,["username"],"right")
 
-finaljoin.write.mode("overwrite").save("s3://DIv41/dest/finalcustomer")
+finaljoin.write.mode("overwrite").save("s3://Div41/dest/finalcustomer")
 
 finaljoin.limit(10).write.format("org.elasticsearch.spark.sql").option("es.nodes","https://search-es41-wysrpzmypr7huqty7ltfxibeca.aos.ap-us-east-2.on.aws").option("es.port","443").option("es.net.http.auth.user","root").option("es.net.http.auth.pass","Divya@usa908").option("es.nodes.wan.only","true").mode("overwrite").save("prod/resume")
 
