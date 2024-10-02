@@ -14,7 +14,7 @@ insert into cust value(2,'Master');
 select * from cust;
 quit
 
-sqoop import -Dfs.s3a.access.key=AKIASE5KQ4H2GPLOYSP7 -Dfs.s3a.secret.key=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 -Dfs.s3a.endpoint=s3.us-east-2.amazonaws.com --connect jdbc:mysql://localhost/zdb --username root --password cloudera --table cust --m 1 --target-dir  s3a://Div41/Divdir
+sqoop import -Dfs.s3a.access.key=A************7 -Dfs.s3a.secret.key=O*****************e -Dfs.s3a.endpoint=s3.us-east-2.amazonaws.com --connect jdbc:mysql://localhost/zdb --username root --password cloudera --table cust --m 1 --target-dir  s3a://Div41/Divdir
 
 
 =====================
