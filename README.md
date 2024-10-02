@@ -2,7 +2,7 @@
 **Overview:**
 
 
-The goal of this project is to construct a data pipeline in AWS Cloud that will involve the integration of several AWS services S3, EMR, EC2, Step Function, and OpenSearch. The pipeline ingests data from multiple sources, performs necessary transformations using PySpark, and writes the final transformed data to the target systems: S3 and Elasticsearch.
+The project is to construct a data pipeline in AWS Cloud that will include the integration of several AWS services S3, Snowflake, WebApi, EMR, Step Function, and OpenSearch. The pipeline ingests data from multiple sources, performs necessary transformations using PySpark, and writes the final transformed data to the target systems: S3 and Elasticsearch and then orchestration is done through Step Function.
 
 
 **Data Pipeline Components:**
