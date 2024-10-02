@@ -1,0 +1,54 @@
+=====================
+🔴 Cloudera -- Cloud Imports
+=====================
+
+
+hadoop dfsadmin -safemode leave
+mysql -uroot -pcloudera
+create database if not exists zdb;
+use zdb;
+drop table cust;
+create table cust(id int,name varchar(100));
+insert into cust value(1,'Divya');
+insert into cust value(2,'Master');
+select * from cust;
+quit
+
+sqoop import -Dfs.s3a.access.key=AKIASE5KQ4H2GPLOYSP7 -Dfs.s3a.secret.key=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 -Dfs.s3a.endpoint=s3.us-east-2.amazonaws.com --connect jdbc:mysql://localhost/zdb --username root --password cloudera --table cust --m 1 --target-dir  s3a://Div41/Divdir
+
+
+=====================
+🔴 Cloudera validate this data
+=====================
+
+
+
+cd ~
+rm -rf awscli-bundle.zip
+rm -rf awscli-bundle
+wget --no-check-certificate https://s3.amazonaws.com/aws-cli/awscli-bundle-1.16.188.zip -O awscli-bundle.zip
+unzip awscli-bundle.zip
+./awscli-bundle/install -i /home/cloudera/aws -b /home/cloudera/bin/aws
+aws=/home/cloudera/bin/aws
+cd
+rm -rf .aws
+mkdir .aws
+cd .aws
+wget https://Div41.s3.amazonaws.com/credentials
+cd
+aws s3 ls s3://Div41
+cd
+
+
+
+
+
+
+
+
+
+
+
+
+
+

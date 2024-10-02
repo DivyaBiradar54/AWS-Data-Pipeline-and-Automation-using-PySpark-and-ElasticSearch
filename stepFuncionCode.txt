@@ -1,0 +1,310 @@
+{
+  "Comment": "State Machine to Create EMR Cluster with Master Node, Execute Multiple Spark Jobs Sequentially, and Terminate EMR Cluster with Logging Enabled",
+  "StartAt": "CreateEMRCluster",
+  "States": {
+    "CreateEMRCluster": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:createCluster",
+      "Parameters": {
+        "Name": "MasterNodeCluster",
+        "Instances": {
+          "InstanceGroups": [
+            {
+              "Name": "Master",
+              "Market": "ON_DEMAND",
+              "InstanceRole": "MASTER",
+              "InstanceType": "m5.xlarge",
+              "InstanceCount": 1
+            }
+          ],
+          "Ec2KeyName": "vasukp",
+          "KeepJobFlowAliveWhenNoSteps": true
+        },
+        "LogUri": "s3://aws-logs-147997123060-us-east-2/",
+        "JobFlowRole": "AmazonEMR-InstanceProfile-20240824T211650",
+        "ServiceRole": "arn:aws:iam::147997123060:role/service-role/AmazonEMR-ServiceRole-20240824T211707",
+        "ReleaseLabel": "emr-6.7.0",
+        "Applications": [
+          {
+            "Name": "Hadoop"
+          },
+          {
+            "Name": "Spark"
+          }
+        ]
+      },
+      "ResultPath": "$.Cluster",
+      "Next": "CaptureClusterId"
+    },
+    "CaptureClusterId": {
+      "Type": "Pass",
+      "Parameters": {
+        "ClusterId.$": "$.Cluster.ClusterId"
+      },
+      "ResultPath": "$.ClusterDetails",
+      "Next": "WaitForClusterRunning"
+    },
+    "WaitForClusterRunning": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckClusterStatus"
+    },
+    "CheckClusterStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emr:describeCluster",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId"
+      },
+      "Next": "ClusterRunning?",
+      "ResultPath": "$.ClusterStatus"
+    },
+    "ClusterRunning?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ClusterStatus.Cluster.Status.State",
+          "StringEquals": "WAITING",
+          "Next": "SubmitS3Job"
+        }
+      ],
+      "Default": "WaitForClusterRunning"
+    },
+    "SubmitS3Job": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "Step": {
+          "Name": "Run S3 Job",
+          "ActionOnFailure": "TERMINATE_CLUSTER",
+          "HadoopJarStep": {
+            "Jar": "command-runner.jar",
+            "Args": [
+              "spark-submit",
+              "--deploy-mode",
+              "client",
+              "--Master",
+              "yarn",
+              "s3://Div41/pyfiles/s3.py"
+            ]
+          }
+        }
+      },
+      "ResultPath": "$.S3StepDetails",
+      "Next": "WaitForS3JobCompletion"
+    },
+    "WaitForS3JobCompletion": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckS3JobStatus"
+    },
+    "CheckS3JobStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emr:describeStep",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "StepId.$": "$.S3StepDetails.Step.Id"
+      },
+      "Next": "S3JobCompleted?",
+      "ResultPath": "$.S3JobStatus"
+    },
+    "S3JobCompleted?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.S3JobStatus.Step.Status.State",
+          "StringEquals": "COMPLETED",
+          "Next": "SubmitApiJob"
+        },
+        {
+          "Variable": "$.S3JobStatus.Step.Status.State",
+          "StringEquals": "FAILED",
+          "Next": "FailState"
+        }
+      ],
+      "Default": "WaitForS3JobCompletion"
+    },
+    "SubmitApiJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "Step": {
+          "Name": "Run API Job",
+          "ActionOnFailure": "TERMINATE_CLUSTER",
+          "HadoopJarStep": {
+            "Jar": "command-runner.jar",
+            "Args": [
+              "spark-submit",
+              "--deploy-mode",
+              "client",
+              "--master",
+              "yarn",
+              "s3://Div41/pyfiles/api.py"
+            ]
+          }
+        }
+      },
+      "ResultPath": "$.ApiStepDetails",
+      "Next": "WaitForApiJobCompletion"
+    },
+    "WaitForApiJobCompletion": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckApiJobStatus"
+    },
+    "CheckApiJobStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emr:describeStep",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "StepId.$": "$.ApiStepDetails.Step.Id"
+      },
+      "Next": "ApiJobCompleted?",
+      "ResultPath": "$.ApiJobStatus"
+    },
+    "ApiJobCompleted?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ApiJobStatus.Step.Status.State",
+          "StringEquals": "COMPLETED",
+          "Next": "SubmitSnowJob"
+        },
+        {
+          "Variable": "$.ApiJobStatus.Step.Status.State",
+          "StringEquals": "FAILED",
+          "Next": "FailState"
+        }
+      ],
+      "Default": "WaitForApiJobCompletion"
+    },
+    "SubmitSnowJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "Step": {
+          "Name": "Run Snow Job",
+          "ActionOnFailure": "TERMINATE_CLUSTER",
+          "HadoopJarStep": {
+            "Jar": "command-runner.jar",
+            "Args": [
+              "spark-submit",
+              "--deploy-mode",
+              "client",
+              "--packages",
+              "net.snowflake:spark-snowflake_2.12:3.0.0",
+              "--master",
+              "yarn",
+              "s3://Div41/pyfiles/snow.py"
+            ]
+          }
+        }
+      },
+      "ResultPath": "$.SnowStepDetails",
+      "Next": "WaitForSnowJobCompletion"
+    },
+    "WaitForSnowJobCompletion": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckSnowJobStatus"
+    },
+    "CheckSnowJobStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emr:describeStep",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "StepId.$": "$.SnowStepDetails.Step.Id"
+      },
+      "Next": "SnowJobCompleted?",
+      "ResultPath": "$.SnowJobStatus"
+    },
+    "SnowJobCompleted?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.SnowJobStatus.Step.Status.State",
+          "StringEquals": "COMPLETED",
+          "Next": "SubmitMasterJob"
+        },
+        {
+          "Variable": "$.SnowJobStatus.Step.Status.State",
+          "StringEquals": "FAILED",
+          "Next": "FailState"
+        }
+      ],
+      "Default": "WaitForSnowJobCompletion"
+    },
+    "SubmitMasterJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:addStep.sync",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "Step": {
+          "Name": "Run Master Job",
+          "ActionOnFailure": "TERMINATE_CLUSTER",
+          "HadoopJarStep": {
+            "Jar": "command-runner.jar",
+            "Args": [
+              "spark-submit",
+              "--deploy-mode",
+              "client",
+              "--packages",
+              "org.elasticsearch:elasticsearch-spark-20_2.12:7.12.0,commons-httpclient:commons-httpclient:3.1",
+              "--master",
+              "yarn",
+              "s3://41/pyfiles/master.py"
+            ]
+          }
+        }
+      },
+      "ResultPath": "$.MasterStepDetails",
+      "Next": "WaitForMasterJobCompletion"
+    },
+    "WaitForMasterJobCompletion": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckMasterJobStatus"
+    },
+    "CheckMasterJobStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emr:describeStep",
+      "Parameters": {
+        "ClusterId.$": "$.ClusterDetails.ClusterId",
+        "StepId.$": "$.MasterStepDetails.Step.Id"
+      },
+      "Next": "MasterJobCompleted?",
+      "ResultPath": "$.MasterJobStatus"
+    },
+    "MasterJobCompleted?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.MasterJobStatus.Step.Status.State",
+          "StringEquals": "COMPLETED",
+          "Next": "TerminateEMRCluster"
+        },
+        {
+          "Variable": "$.MasterJobStatus.Step.Status.State",
+          "StringEquals": "FAILED",
+          "Next": "FailState"
+        }
+      ],
+      "Default": "WaitForMasterJobCompletion"
+    },
+    "TerminateEMRCluster": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emr:terminateJobFlows",
+      "Parameters": {
+        "JobFlowIds.$": "States.Array($.ClusterDetails.ClusterId)"
+      },
+      "End": true
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Error": "SparkJobFailed",
+      "Cause": "The Spark job failed."
+    }
+  }
+}
